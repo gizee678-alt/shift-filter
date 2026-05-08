@@ -5,9 +5,6 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,28 +26,43 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Verify project structure
+      - name: Create fresh Flutter project (correct Android embedding)
         run: |
-          echo "=== Project files ==="
-          ls -la
-          echo "=== pubspec.yaml ==="
-          cat pubspec.yaml
-          echo "=== lib/ ==="
-          ls lib/
+          flutter create \
+            --org com.shiftfilter \
+            --project-name shift_filter \
+            --platforms android \
+            fresh_app
+
+      - name: Inject our source code into fresh project
+        run: |
+          # Replace lib/ with our code
+          rm -rf fresh_app/lib
+          cp -r lib fresh_app/lib
+
+          # Replace pubspec.yaml with our dependencies
+          cp pubspec.yaml fresh_app/pubspec.yaml
+
+          # Copy assets
+          mkdir -p fresh_app/assets
+          cp -r assets/. fresh_app/assets/ 2>/dev/null || true
 
       - name: Get dependencies
+        working-directory: fresh_app
         run: flutter pub get
 
       - name: Generate launcher icons
+        working-directory: fresh_app
         run: flutter pub run flutter_launcher_icons
         continue-on-error: true
 
       - name: Build release APK
+        working-directory: fresh_app
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ShiftFilter-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: fresh_app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
